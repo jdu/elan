@@ -1,5 +1,11 @@
+//! Configuration loading for elan-central.
+//!
+//! Settings are layered: built-in defaults < config file (TOML/YAML/JSON)
+//! < `ELAN_CENTRAL__*` environment variables.
+
 use serde::Deserialize;
 
+/// Top-level configuration for the elan-central authority service.
 #[derive(Debug, Deserialize, Clone)]
 pub struct CentralConfig {
     pub grpc_addr: String,
@@ -17,6 +23,7 @@ impl Default for CentralConfig {
     }
 }
 
+/// Load configuration, optionally from a file path, then override with env vars.
 pub fn load(config_path: Option<&str>) -> anyhow::Result<CentralConfig> {
     let mut builder = config::Config::builder()
         .set_default("grpc_addr", "0.0.0.0:50051")?

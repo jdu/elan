@@ -1,6 +1,9 @@
+//! Core catalog types describing datasets and coordinators.
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Full metadata for a registered dataset, including its Arrow schema in IPC wire format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatasetInfo {
     pub id: Uuid,
@@ -14,6 +17,7 @@ pub struct DatasetInfo {
     pub metadata: serde_json::Value,
 }
 
+/// The underlying data format / engine backing a dataset.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceType {
@@ -49,6 +53,7 @@ impl TryFrom<&str> for SourceType {
     }
 }
 
+/// Runtime state of a registered coordinator, as stored in elan-central.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoordinatorInfo {
     pub id: String,

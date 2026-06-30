@@ -1,3 +1,5 @@
+// Build script: compile all elan proto files with tonic_build so both server
+// and client stubs are available in elan-common's generated `proto` module.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let proto_dir = "../../proto";
 

@@ -1,5 +1,12 @@
+//! Unified error type for the elan system.
+//!
+//! [`ElanError`] is the single error enum used across all public APIs.
+//! The `From<ElanError> for tonic::Status` impl enables propagating domain
+//! errors directly through gRPC handlers without manual mapping.
+
 use thiserror::Error;
 
+/// Top-level error type for all elan operations.
 #[derive(Error, Debug)]
 pub enum ElanError {
     #[error("dataset not found: {namespace}.{name}")]

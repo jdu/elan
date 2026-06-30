@@ -1,3 +1,17 @@
+//! elan-executor: local query execution engine deployed alongside the coordinator.
+//!
+//! Starts two services on the configured host:
+//! - **Ballista scheduler + executor** on `bind_port`: handles distributed plan
+//!   execution.  The Ballista executor is kept alive for API-level compatibility
+//!   but is **never called** for actual queries — elan-query bypasses it via the
+//!   HTTP SQL service.  Removing Ballista would require Cargo-level changes.
+//! - **HTTP SQL service** on `bind_port + 1` (i.e. port 50056): `POST /sql`
+//!   accepts plain-text SQL and returns Arrow IPC bytes.  This is the endpoint
+//!   that `RemoteTableScanExec` in elan-query calls.
+//!
+//! `ctrl_c` is required to keep the process alive because
+//! `new_standalone_executor()` spawns background tasks and returns immediately.
+
 mod auth;
 mod config;
 mod context;

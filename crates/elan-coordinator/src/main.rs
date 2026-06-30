@@ -1,3 +1,11 @@
+//! elan-coordinator: remote-side agent that registers local data with elan-central.
+//!
+//! On startup the coordinator:
+//! 1. Reads its TOML config (datasets, central endpoint, executor endpoint).
+//! 2. Registers itself and all configured datasets with elan-central via gRPC.
+//! 3. Starts an HTTP server (`/health`, `/auth/check`) on the configured port.
+//! 4. Runs a continuous heartbeat loop to keep its record alive in elan-central.
+
 mod config;
 mod dataset;
 mod heartbeat;

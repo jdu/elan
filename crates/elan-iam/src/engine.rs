@@ -1,10 +1,25 @@
+//! IAM engine trait and implementations.
+//!
+//! [`SnapshotIamEngine`] holds an in-memory snapshot of policies loaded from
+//! elan-central.  The snapshot is protected by an `RwLock` so it can be
+//! replaced atomically via [`IamEngine::reload`] without restarting the process.
+//!
+//! Policy evaluation order: Deny always beats Allow; within the same effect,
+//! higher `priority` wins.  If no policy matches, access is **denied by default**.
+
 use crate::types::{AccessDecision, ColumnMask, MaskKind, Policy, PolicyEffect, ResourceId, Subject};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tracing::debug;
 
+/// Core IAM evaluation interface.
+///
+/// Implementations must be thread-safe (`Send + Sync`) because they are shared
+/// via `Arc` across concurrent request tasks.
 pub trait IamEngine: Send + Sync + 'static + std::fmt::Debug {
+    /// Evaluate whether `subject` may perform `action` on `resource`.
     fn check(&self, subject: &Subject, resource: &ResourceId, action: &str) -> AccessDecision;
+    /// Replace the in-memory policy set atomically (called after mutations in elan-central).
     fn reload(&self, policies: Vec<Policy>);
 }
 
@@ -16,6 +31,8 @@ pub struct SnapshotIamEngine {
 }
 
 impl SnapshotIamEngine {
+    /// Create a new engine pre-loaded with the given policies.
+    /// Returns `Arc<Self>` because callers always share it across tasks.
     pub fn new(policies: Vec<Policy>) -> Arc<Self> {
         Arc::new(Self {
             policies: Arc::new(RwLock::new(policies)),

@@ -1,3 +1,13 @@
+//! DataFusion `CatalogProvider` and `SchemaProvider` implementations.
+//!
+//! [`ElanCatalogProvider`] is registered into the DataFusion `SessionContext`
+//! under the name `"elan"`.  Two-part table references like `crm.customers`
+//! therefore resolve to `elan.crm.customers` because the session is
+//! configured with `with_default_catalog_and_schema("elan", "public")`.
+//!
+//! [`ElanSchemaProvider`] maintains a local cache of datasets and re-fetches
+//! from elan-central on cache miss (e.g. after a new dataset is registered).
+
 use crate::catalog::table::ElanTableProvider;
 use arrow_ipc::reader::StreamReader;
 use arrow_schema::SchemaRef;
@@ -17,12 +27,14 @@ use tokio::runtime::Handle;
 use tonic::transport::Channel;
 use tracing::{debug, warn};
 
+/// Top-level DataFusion catalog for the elan system, keyed by namespace name.
 #[derive(Debug)]
 pub struct ElanCatalogProvider {
     schemas: Arc<RwLock<HashMap<String, Arc<ElanSchemaProvider>>>>,
 }
 
 impl ElanCatalogProvider {
+    /// Create a new catalog provider pre-populated with the given schema map.
     pub fn new(schemas: HashMap<String, Arc<ElanSchemaProvider>>) -> Arc<Self> {
         Arc::new(Self {
             schemas: Arc::new(RwLock::new(schemas)),
@@ -63,6 +75,10 @@ impl CatalogProvider for ElanCatalogProvider {
     }
 }
 
+/// DataFusion `SchemaProvider` for a single elan namespace.
+///
+/// Applies IAM visibility filtering before returning tables.  On a table
+/// cache miss it fetches the dataset from elan-central's `CatalogService`.
 #[derive(Clone, Debug)]
 pub struct ElanSchemaProvider {
     pub namespace: String,

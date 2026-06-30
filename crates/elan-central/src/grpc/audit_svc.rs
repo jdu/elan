@@ -1,3 +1,14 @@
+//! gRPC `AuditService` implementation.
+//!
+//! `stream_audit_events` first replays recent events from SQLite (catch-up),
+//! then switches to a live broadcast channel so newly published events arrive
+//! in real time.  Multiple TUI clients can subscribe simultaneously because
+//! `tokio::sync::broadcast` supports multiple receivers.
+//!
+//! `publish_event` is called by elan-query (and other services) via
+//! [`CentralAuditSink`](elan_audit::CentralAuditSink).  It persists the
+//! event to SQLite and then broadcasts it to all active stream subscribers.
+
 use crate::db::iam_store::IamStore;
 use elan_common::proto::audit::{
     audit_service_server::AuditService, AuditEventProto, PublishResponse, StreamRequest,
@@ -11,12 +22,14 @@ use tracing::warn;
 /// A broadcast channel allows multiple TUI clients to subscribe to the same audit stream.
 pub type AuditBroadcast = broadcast::Sender<AuditEventProto>;
 
+/// gRPC handler for the `AuditService` proto service.
 pub struct AuditSvc {
     store: Arc<IamStore>,
     broadcast: AuditBroadcast,
 }
 
 impl AuditSvc {
+    /// Construct the service with the shared IAM/audit store and broadcast sender.
     pub fn new(store: Arc<IamStore>, broadcast: AuditBroadcast) -> Self {
         Self { store, broadcast }
     }

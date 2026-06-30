@@ -1,6 +1,12 @@
+//! HTTP client for elan-query's REST API.
+//!
+//! Sends the `Authorization: Bearer <username>` header with every request
+//! to authenticate the TUI user with elan-query's PoC auth layer.
+
 use elan_common::types::api::{CatalogResponse, QueryRequest, QueryResponse};
 use reqwest::Client;
 
+/// HTTP client for `POST /api/v1/query` and `GET /api/v1/catalog` on elan-query.
 pub struct QueryClient {
     client: Client,
     base_url: String,
@@ -16,6 +22,7 @@ impl QueryClient {
         }
     }
 
+    /// Execute a SQL query and return the JSON response.
     pub async fn query(&self, sql: &str, session_id: &str) -> anyhow::Result<QueryResponse> {
         let resp = self
             .client
@@ -37,6 +44,7 @@ impl QueryClient {
         }
     }
 
+    /// Fetch the IAM-filtered catalog (namespaces + datasets) for this user.
     pub async fn catalog(&self) -> anyhow::Result<CatalogResponse> {
         let resp = self
             .client

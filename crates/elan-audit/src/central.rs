@@ -1,3 +1,9 @@
+//! [`CentralAuditSink`]: publishes audit events to elan-central over gRPC.
+//!
+//! elan-central persists each event to SQLite and re-broadcasts it on its
+//! internal broadcast channel, so the TUI sees events in real time via the
+//! `stream_audit_events` streaming RPC.
+
 use crate::{AuditEvent, AuditSink};
 use async_trait::async_trait;
 use elan_common::{
@@ -13,6 +19,7 @@ pub struct CentralAuditSink {
 }
 
 impl CentralAuditSink {
+    /// Connect to the elan-central gRPC endpoint and return a ready sink.
     pub async fn new(endpoint: &str) -> anyhow::Result<Self> {
         let channel = Channel::from_shared(endpoint.to_string())?
             .connect()

@@ -1,3 +1,9 @@
+//! HTTP SQL service: `POST /sql` → Arrow IPC stream.
+//!
+//! This is the primary query path for elan-query.  `RemoteTableScanExec`
+//! posts plain-text SQL here and receives Arrow IPC bytes in response.
+//! A new `SessionContext` is created per request so sessions are stateless.
+
 use arrow_ipc::writer::StreamWriter;
 use axum::{
     Router,
@@ -12,6 +18,7 @@ use datafusion::prelude::SessionContext;
 use std::sync::Arc;
 use tracing::{debug, error};
 
+/// Shared state for the SQL HTTP service: a pre-built list of table providers.
 #[derive(Clone)]
 pub struct SqlServiceState {
     providers: Arc<Vec<(String, Arc<dyn TableProvider>)>>,

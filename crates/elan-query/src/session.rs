@@ -1,3 +1,19 @@
+//! Per-request DataFusion session factory for elan-query.
+//!
+//! [`SessionFactory`] owns the shared catalog state (dataset list, IAM engine)
+//! and builds a fresh `SessionContext` for each incoming query with the
+//! requesting user's IAM context baked in.
+//!
+//! **Why `Arc<Self>` not `Self`?**  `new()` spawns a background catalog-refresh
+//! task that holds a `Weak<Self>`.  The weak reference lets the background task
+//! detect when the factory is dropped (e.g. in tests) and exit cleanly, avoiding
+//! a reference cycle that would keep the factory alive forever.
+//!
+//! **`with_default_catalog_and_schema("elan", "public")`**: DataFusion resolves
+//! unqualified table references against the default catalog and schema.  Setting
+//! the default catalog to `"elan"` means a two-part reference like
+//! `crm.customers` resolves to `elan.crm.customers` as intended.
+
 use crate::catalog::provider::{ElanCatalogProvider, ElanSchemaProvider};
 use crate::config::QueryConfig;
 use datafusion::execution::context::SessionContext;
@@ -22,6 +38,9 @@ use tokio_stream::StreamExt;
 use tonic::transport::Channel;
 use tracing::info;
 
+/// Builds per-request DataFusion sessions with IAM enforcement wired in.
+///
+/// Shared via `Arc<SessionFactory>` between HTTP handler tasks.
 pub struct SessionFactory {
     catalog_client: Arc<tokio::sync::Mutex<CatalogServiceClient<Channel>>>,
     iam_engine: Arc<SnapshotIamEngine>,
@@ -29,6 +48,9 @@ pub struct SessionFactory {
 }
 
 impl SessionFactory {
+    /// Connect to elan-central, load datasets and IAM policies, then start the
+    /// background catalog-refresh task.  Returns an `Arc<Self>` because the
+    /// refresh task holds a `Weak` back-reference to detect factory shutdown.
     pub async fn new(cfg: &QueryConfig) -> anyhow::Result<Arc<Self>> {
         let channel = tonic::transport::Channel::from_shared(cfg.central_endpoint.clone())?
             .connect()
@@ -132,6 +154,7 @@ impl SessionFactory {
         Ok(ctx)
     }
 
+    /// Expose the shared IAM engine (e.g. for the IAM gRPC service to reload it).
     pub fn iam_engine(&self) -> &Arc<SnapshotIamEngine> {
         &self.iam_engine
     }

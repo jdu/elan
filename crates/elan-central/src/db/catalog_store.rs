@@ -1,17 +1,27 @@
+//! SQLite-backed catalog store for elan-central.
+//!
+//! Persists coordinator registrations and dataset metadata.
+//! All queries join `datasets` to `coordinators` and filter on
+//! `is_active = 1 AND is_alive = 1` so dead coordinators' datasets
+//! are automatically excluded from catalog reads.
+
 use chrono::Utc;
 use elan_common::types::catalog::{DatasetInfo, SourceType};
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 
+/// Wraps a SQLite pool and provides catalog read/write operations.
 pub struct CatalogStore {
     pool: SqlitePool,
 }
 
 impl CatalogStore {
+    /// Create a store backed by the given connection pool.
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
 
+    /// Insert or update a coordinator record, marking it alive.
     pub async fn upsert_coordinator(
         &self,
         id: &str,
@@ -43,6 +53,7 @@ impl CatalogStore {
         Ok(())
     }
 
+    /// Refresh the `last_heartbeat_at` timestamp for a coordinator and mark it alive.
     pub async fn heartbeat(&self, coordinator_id: &str) -> anyhow::Result<()> {
         let now = Utc::now().to_rfc3339();
         sqlx::query("UPDATE coordinators SET last_heartbeat_at = ?, is_alive = 1 WHERE id = ?")
@@ -53,6 +64,11 @@ impl CatalogStore {
         Ok(())
     }
 
+    /// Insert or update a dataset record identified by `(namespace, name)`.
+    ///
+    /// The `executor_endpoint` is not provided by the caller directly; it is
+    /// resolved from the coordinator record via a JOIN so it stays in sync
+    /// with the coordinator's registered endpoint.
     pub async fn upsert_dataset(
         &self,
         coordinator_id: &str,
@@ -60,7 +76,7 @@ impl CatalogStore {
         name: &str,
         namespace: &str,
         source_type: &str,
-        _ignored: &str,
+        _ignored: &str, // historically passed executor_endpoint; now resolved from coordinator
         arrow_schema_ipc: &[u8],
         metadata_json: Option<&str>,
     ) -> anyhow::Result<()> {
@@ -106,6 +122,7 @@ impl CatalogStore {
         Ok(())
     }
 
+    /// Fetch a single active dataset, or `None` if not found or its coordinator is dead.
     pub async fn get_dataset(
         &self,
         namespace: &str,
@@ -129,6 +146,7 @@ impl CatalogStore {
             .transpose()
     }
 
+    /// List all active datasets, optionally filtering by namespace.
     pub async fn list_datasets(
         &self,
         namespace_filter: Option<&str>,
@@ -165,6 +183,7 @@ impl CatalogStore {
         rows.iter().map(row_to_dataset).collect()
     }
 
+    /// Soft-delete a dataset by setting `is_active = 0`.
     pub async fn deactivate_dataset(&self, dataset_id: &str) -> anyhow::Result<()> {
         sqlx::query("UPDATE datasets SET is_active = 0 WHERE id = ?")
             .bind(dataset_id)
@@ -173,6 +192,7 @@ impl CatalogStore {
         Ok(())
     }
 
+    /// Mark a coordinator as dead so its datasets are excluded from catalog reads.
     pub async fn mark_coordinator_dead(&self, coordinator_id: &str) -> anyhow::Result<()> {
         sqlx::query("UPDATE coordinators SET is_alive = 0 WHERE id = ?")
             .bind(coordinator_id)

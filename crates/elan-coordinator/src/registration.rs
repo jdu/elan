@@ -1,3 +1,9 @@
+//! One-shot startup registration with elan-central.
+//!
+//! Sends a `RegisterRequest` for the coordinator itself, then a
+//! `DatasetRegistration` for each dataset in the config.  Schema inference
+//! runs as part of [`to_registration`] in the dataset module.
+
 use crate::config::CoordinatorConfig;
 use crate::dataset::to_registration;
 use elan_common::proto::coordinator::{
@@ -6,6 +12,7 @@ use elan_common::proto::coordinator::{
 use tonic::transport::Channel;
 use tracing::info;
 
+/// Register this coordinator and all its datasets with elan-central.
 pub async fn register(
     cfg: &CoordinatorConfig,
     client: &mut CoordinatorServiceClient<Channel>,

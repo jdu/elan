@@ -1,3 +1,9 @@
+//! DataFusion `TableProvider` that dispatches scans to a remote executor.
+//!
+//! [`ElanTableProvider`] is a leaf in the DataFusion physical plan.  Its
+//! `scan()` method returns a [`RemoteTableScanExec`], which is later
+//! intercepted by [`IamFilterRule`](elan_iam::optimizer::IamFilterRule).
+
 use crate::planner::remote_scan::RemoteTableScanExec;
 use arrow_schema::SchemaRef;
 use async_trait::async_trait;
@@ -12,6 +18,11 @@ use datafusion::{
 use elan_common::types::DatasetInfo;
 use std::{any::Any, sync::Arc};
 
+/// DataFusion `TableProvider` backed by a remote elan-executor.
+///
+/// The stored schema may be a placeholder if inference failed at coordinator
+/// registration time; the real schema is obtained from the executor at query
+/// time via the Arrow IPC response.
 #[derive(Debug)]
 pub struct ElanTableProvider {
     pub dataset: DatasetInfo,
@@ -63,6 +74,8 @@ impl TableProvider for ElanTableProvider {
         &self,
         filters: &[&Expr],
     ) -> DfResult<Vec<TableProviderFilterPushDown>> {
+        // Report Inexact (not Exact) so DataFusion re-applies filters locally
+        // after receiving results; the executor may not support all predicates.
         Ok(vec![
             TableProviderFilterPushDown::Inexact;
             filters.len()

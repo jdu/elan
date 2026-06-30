@@ -1,3 +1,10 @@
+//! gRPC `IamService` implementation.
+//!
+//! Manages IAM subjects (users/groups), policies, and ad-hoc access checks.
+//! Policy mutation methods (`create_policy`, `delete_policy`) call
+//! `reload_engine()` afterwards so the in-process [`SnapshotIamEngine`] stays
+//! consistent with the database without requiring a process restart.
+
 use crate::db::iam_store::IamStore;
 use elan_common::proto::iam::{
     iam_service_server::IamService, AccessDecision as ProtoDecision, AccessRequest,
@@ -9,12 +16,15 @@ use std::sync::Arc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
+/// gRPC handler for the `IamService` proto service.
 pub struct IamSvc {
     store: Arc<IamStore>,
+    /// Shared in-process engine; reloaded after every policy write.
     engine: Arc<elan_iam::SnapshotIamEngine>,
 }
 
 impl IamSvc {
+    /// Construct the service with the shared IAM store and snapshot engine.
     pub fn new(store: Arc<IamStore>, engine: Arc<elan_iam::SnapshotIamEngine>) -> Self {
         Self { store, engine }
     }

@@ -1,5 +1,12 @@
+//! Configuration types and loading for elan-coordinator.
+//!
+//! Configuration is read from a TOML file (path supplied via `--config`).
+//! The `datasets` array declares every data source this coordinator should
+//! register with elan-central.
+
 use serde::Deserialize;
 
+/// Top-level coordinator configuration (parsed from TOML).
 #[derive(Debug, Clone, Deserialize)]
 pub struct CoordinatorConfig {
     pub coordinator: CoordinatorMeta,
@@ -10,6 +17,7 @@ pub struct CoordinatorConfig {
     pub datasets: Vec<DatasetConfig>,
 }
 
+/// Identity fields sent to elan-central on registration.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CoordinatorMeta {
     pub id: String,
@@ -17,16 +25,20 @@ pub struct CoordinatorMeta {
     pub hostname: String,
 }
 
+/// gRPC endpoint for elan-central.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CentralConfig {
     pub endpoint: String,
 }
 
+/// HTTP endpoint of the co-located elan-executor, advertised to elan-central
+/// so that elan-query can dispatch SQL to it.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ExecutorConfig {
     pub endpoint: String,
 }
 
+/// Coordinator's own HTTP server configuration (auth-check endpoint).
 #[derive(Debug, Clone, Deserialize)]
 pub struct HttpConfig {
     #[serde(default = "default_http_addr")]
@@ -37,6 +49,10 @@ fn default_http_addr() -> String {
     "0.0.0.0:8081".to_string()
 }
 
+/// Descriptor for a single dataset this coordinator should register.
+///
+/// The `type` field (TOML inline table `type = "parquet"` etc.) is used as
+/// the serde tag to select the variant.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DatasetConfig {
@@ -135,6 +151,7 @@ impl DatasetConfig {
     }
 }
 
+/// Parse coordinator configuration from a TOML file.
 pub fn load(config_path: &str) -> anyhow::Result<CoordinatorConfig> {
     let content = std::fs::read_to_string(config_path)?;
     let cfg: CoordinatorConfig = toml::from_str(&content)?;

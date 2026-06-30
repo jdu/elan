@@ -1,3 +1,10 @@
+//! gRPC `CatalogService` implementation.
+//!
+//! Exposes read-only access to the catalog (datasets and coordinators) stored
+//! in SQLite.  The streaming `list_datasets` and `search_datasets` RPCs send
+//! results over a bounded mpsc channel to avoid materializing the full
+//! result set in memory before the first byte is sent.
+
 use crate::db::catalog_store::CatalogStore;
 use elan_common::proto::catalog::{
     catalog_service_server::CatalogService, DatasetProto, GetDatasetRequest, ListDatasetsRequest,
@@ -7,11 +14,13 @@ use std::sync::Arc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
+/// gRPC handler for the `CatalogService` proto service.
 pub struct CatalogSvc {
     store: Arc<CatalogStore>,
 }
 
 impl CatalogSvc {
+    /// Construct the service with the shared catalog store.
     pub fn new(store: Arc<CatalogStore>) -> Self {
         Self { store }
     }

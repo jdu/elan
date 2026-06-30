@@ -1,3 +1,20 @@
+//! `RemoteTableScanExec`: DataFusion leaf plan node for remote query fan-out.
+//!
+//! When DataFusion executes a query, each `RemoteTableScanExec` node sends
+//! `SELECT * FROM "<table>"` to its assigned elan-executor via HTTP and
+//! streams the Arrow IPC response back as `RecordBatch`es.
+//!
+//! **Why `block_in_place` + `block_on`?**  DataFusion's `ExecutionPlan::execute()`
+//! is a *synchronous* function but we need to issue an async HTTP request.
+//! `tokio::task::block_in_place` moves the current task off the async executor
+//! pool so it can safely call `Handle::current().block_on(...)` without
+//! deadlocking the runtime.
+//!
+//! **Why `SELECT *`?**  The executor has the authoritative schema from the
+//! real data files.  The schema stored in elan-central may be stale or a
+//! `_placeholder` column from a failed inference run.  elan-query projects
+//! columns locally using DataFusion after receiving the full result set.
+
 use arrow_ipc::reader::StreamReader;
 use arrow_schema::SchemaRef;
 use datafusion::{

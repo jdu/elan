@@ -1,3 +1,9 @@
+//! [`KafkaAuditSink`]: publishes audit events to Apache Kafka topics.
+//!
+//! Each event is serialized to JSON and sent to a topic derived from the
+//! event type (e.g. `elan.audit.query.submitted`).  The sink is optional —
+//! elan-query falls back to [`NoOpAuditSink`] when no brokers are configured.
+
 use crate::{sink::AuditSink, AuditEvent};
 use async_trait::async_trait;
 use elan_common::ElanError;
@@ -8,11 +14,13 @@ use rdkafka::{
 use std::time::Duration;
 use tracing::instrument;
 
+/// Audit sink that sends events to Kafka using `rdkafka`'s async `FutureProducer`.
 pub struct KafkaAuditSink {
     producer: FutureProducer,
 }
 
 impl KafkaAuditSink {
+    /// Create a sink using a comma-separated broker list, e.g. `"localhost:9092"`.
     pub fn new(brokers: &str) -> Result<Self, ElanError> {
         let producer: FutureProducer = ClientConfig::new()
             .set("bootstrap.servers", brokers)
@@ -24,6 +32,7 @@ impl KafkaAuditSink {
         Ok(Self { producer })
     }
 
+    /// Create a sink from a fully-configured `rdkafka::ClientConfig` (useful in tests).
     pub fn new_with_config(config: &ClientConfig) -> Result<Self, ElanError> {
         let producer: FutureProducer = config
             .create()

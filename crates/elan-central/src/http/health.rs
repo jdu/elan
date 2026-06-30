@@ -1,3 +1,5 @@
+//! HTTP `GET /health` endpoint for elan-central.
+
 use axum::{Json, Router, routing::get};
 use elan_common::types::api::HealthResponse;
 

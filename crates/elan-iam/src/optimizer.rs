@@ -1,3 +1,16 @@
+//! DataFusion physical optimizer rule that enforces IAM at query execution time.
+//!
+//! [`IamFilterRule`] walks the physical plan tree and intercepts every node
+//! named `"RemoteTableScanExec"`.  It then checks the IAM engine:
+//! - **Deny** → replace the scan node with an `EmptyExec` (no rows, same schema).
+//! - **Allow with row filter** → logged as a warning; row-filter application is
+//!   a TODO (see `TODO.md`).  Column masking is also not yet implemented.
+//! - **Allow (no filter)** → pass through unchanged.
+//!
+//! The extractor callback (`with_extractor`) breaks the dependency cycle:
+//! elan-iam does not depend on elan-query, so the extractor is injected by
+//! elan-query during session construction.
+
 use crate::{AccessDecision, IamEngine, ResourceId, Subject};
 use datafusion::{
     config::ConfigOptions,

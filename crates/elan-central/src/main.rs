@@ -1,3 +1,13 @@
+//! elan-central: the authoritative catalog, IAM, and audit authority.
+//!
+//! Starts two servers on configurable addresses:
+//! - **gRPC** (default `0.0.0.0:50051`): `CatalogService`, `CoordinatorService`,
+//!   `IamService`, `AuditService` — all backed by a shared SQLite database.
+//! - **HTTP** (default `0.0.0.0:8080`): `/health` liveness probe.
+//!
+//! The IAM engine ([`SnapshotIamEngine`]) is bootstrapped from persisted
+//! policies at startup and reloaded in-process after each policy mutation.
+
 mod config;
 mod db;
 mod grpc;

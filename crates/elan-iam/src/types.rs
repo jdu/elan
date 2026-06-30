@@ -1,13 +1,17 @@
+//! IAM domain types: subjects, resources, policies, and access decisions.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+/// The identity issuing a query — resolved from the HTTP `Authorization` header.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Subject {
     pub user_id: String,
     pub groups: Vec<String>,
 }
 
+/// Identifies a dataset as `namespace.name` for IAM policy matching.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceId {
     pub namespace: String,
@@ -20,25 +24,32 @@ impl ResourceId {
     }
 }
 
+/// Simple allow/deny enumeration (used internally; policies use [`PolicyEffect`]).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Effect {
     Allow,
     Deny,
 }
 
+/// How a masked column should be transformed (column masking is a TODO).
 #[derive(Debug, Clone)]
 pub enum MaskKind {
     Redact,
     Sha256,
 }
 
+/// Maps column name → masking transformation for an Allow policy with column restrictions.
 #[derive(Debug, Clone)]
 pub struct ColumnMask(pub HashMap<String, MaskKind>);
 
+/// The outcome of an IAM policy evaluation for a subject + resource + action triple.
 #[derive(Debug, Clone)]
 pub enum AccessDecision {
+    /// Access is granted, optionally with a SQL row filter and/or column masking.
     Allow {
+        /// Optional SQL predicate to inject as a row-level filter (TODO: not yet applied).
         row_filter: Option<String>,
+        /// Optional column masking specification (TODO: not yet applied).
         column_mask: Option<ColumnMask>,
     },
     Deny {
@@ -52,6 +63,7 @@ impl AccessDecision {
     }
 }
 
+/// A single IAM policy record as stored in elan-central and evaluated by the engine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Policy {
     pub id: Uuid,
@@ -65,6 +77,7 @@ pub struct Policy {
     pub priority: i32,
 }
 
+/// Whether a policy grants or revokes access.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum PolicyEffect {
@@ -72,6 +85,7 @@ pub enum PolicyEffect {
     Deny,
 }
 
+/// Whether a policy applies to a specific user or to members of a group.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SubjectType {

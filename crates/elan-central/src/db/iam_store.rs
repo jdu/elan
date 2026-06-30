@@ -1,16 +1,25 @@
+//! SQLite-backed IAM and audit-event store for elan-central.
+//!
+//! Manages subjects (users/groups), group memberships, IAM policies, and the
+//! persistent audit event log.  Policy changes trigger an in-process reload of
+//! the [`SnapshotIamEngine`](elan_iam::SnapshotIamEngine) via `reload()`.
+
 use elan_iam::types::{Policy, PolicyEffect, SubjectType};
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 
+/// Wraps a SQLite pool and provides IAM subject, policy, and audit-event operations.
 pub struct IamStore {
     pool: SqlitePool,
 }
 
 impl IamStore {
+    /// Create a store backed by the given connection pool.
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
 
+    /// Create a new IAM subject (user or group) and return its generated UUID string.
     pub async fn create_subject(&self, subject_type: &str, name: &str) -> anyhow::Result<String> {
         let id = Uuid::new_v4().to_string();
         sqlx::query("INSERT INTO iam_subjects (id, subject_type, name) VALUES (?, ?, ?)")
@@ -22,6 +31,7 @@ impl IamStore {
         Ok(id)
     }
 
+    /// Return the existing subject ID for `name`, or create it if absent.
     pub async fn get_or_create_subject(
         &self,
         subject_type: &str,
@@ -38,6 +48,7 @@ impl IamStore {
         }
     }
 
+    /// Add `user_name` to `group_name`, creating both subjects if needed.
     pub async fn add_group_member(&self, group_name: &str, user_name: &str) -> anyhow::Result<()> {
         let group_id = self.get_or_create_subject("group", group_name).await?;
         let user_id = self.get_or_create_subject("user", user_name).await?;
@@ -51,6 +62,7 @@ impl IamStore {
         Ok(())
     }
 
+    /// Persist a new IAM policy and return its generated UUID string.
     pub async fn create_policy(
         &self,
         subject_name: &str,
@@ -84,6 +96,7 @@ impl IamStore {
         Ok(policy_id)
     }
 
+    /// Permanently delete a policy by ID.
     pub async fn delete_policy(&self, policy_id: &str) -> anyhow::Result<()> {
         sqlx::query("DELETE FROM iam_policies WHERE id = ?")
             .bind(policy_id)
@@ -92,6 +105,7 @@ impl IamStore {
         Ok(())
     }
 
+    /// List all policies, optionally filtered to those belonging to a specific subject.
     pub async fn list_policies(
         &self,
         subject_name: Option<&str>,
@@ -141,6 +155,7 @@ impl IamStore {
             .collect::<Result<Vec<_>, anyhow::Error>>()
     }
 
+    /// Persist an audit event to SQLite so it can be replayed for catch-up on stream connect.
     pub async fn store_audit_event(
         &self,
         id: &str,
@@ -170,6 +185,10 @@ impl IamStore {
         Ok(())
     }
 
+    /// Retrieve recent audit events for catch-up replay when a TUI client connects.
+    ///
+    /// Returns a tuple per row: `(id, event_type, occurred_at, source_service,
+    /// user_id, session_id, payload_json)`.
     pub async fn get_recent_audit_events(
         &self,
         since: Option<&str>,

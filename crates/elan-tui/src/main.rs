@@ -1,3 +1,13 @@
+//! elan-tui: terminal UI for the elan federated query system.
+//!
+//! Connects to elan-query (HTTP REST) for query execution and catalog browsing,
+//! and to elan-central (gRPC) for the live audit event stream.
+//!
+//! The event loop multiplexes three async sources over a single `mpsc` channel:
+//! - Keyboard events from crossterm
+//! - Audit events from the elan-central gRPC stream
+//! - Query results from elan-query (spawned as background tasks)
+
 mod app;
 mod client;
 
@@ -13,6 +23,7 @@ use std::io;
 use tokio::sync::mpsc;
 use tracing::error;
 
+/// Internal event type that unifies all async event sources onto one channel.
 #[derive(Debug)]
 enum AppEvent {
     Key(KeyEvent),

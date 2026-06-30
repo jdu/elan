@@ -1,3 +1,12 @@
+//! gRPC `CoordinatorService` implementation.
+//!
+//! Handles coordinator lifecycle: initial registration, continuous heartbeat
+//! streaming, dataset registration, and dataset deactivation.
+//!
+//! **Known limitation**: `register_dataset` generates a new UUID on every
+//! call, so the same `(coordinator_id, namespace, name)` triple gets a fresh
+//! `dataset_id` each time.  Deduplication via a stable hash is a TODO.
+
 use crate::db::catalog_store::CatalogStore;
 use elan_common::proto::coordinator::{
     coordinator_service_server::CoordinatorService, DatasetRegistration,
@@ -10,11 +19,13 @@ use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 use tonic::{Request, Response, Status, Streaming};
 use tracing::{info, warn};
 
+/// gRPC handler for the `CoordinatorService` proto service.
 pub struct CoordinatorSvc {
     store: Arc<CatalogStore>,
 }
 
 impl CoordinatorSvc {
+    /// Construct the service with the shared catalog store.
     pub fn new(store: Arc<CatalogStore>) -> Self {
         Self { store }
     }

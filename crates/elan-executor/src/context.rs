@@ -1,3 +1,11 @@
+//! DataFusion context setup for elan-executor.
+//!
+//! [`build_providers`] registers each configured dataset into a temporary
+//! `SessionContext` (async), then immediately deregisters them to get back
+//! the `Arc<dyn TableProvider>` handles.  These handles are then registered
+//! synchronously into every Ballista session context via the `SessionBuilder`
+//! closure, which cannot be async.
+
 use crate::config::{DatasetMount, ExecutorConfig};
 use datafusion::catalog::TableProvider;
 use datafusion::prelude::*;

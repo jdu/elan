@@ -1,5 +1,12 @@
+//! Configuration types and loading for elan-executor.
+//!
+//! The executor binds two ports derived from a single `bind_port`:
+//! - `bind_port` — Ballista scheduler/executor gRPC (kept for compatibility).
+//! - `bind_port + 1` — Arrow IPC HTTP SQL service used by elan-query.
+
 use serde::Deserialize;
 
+/// Top-level executor configuration.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ExecutorConfig {
     pub bind_host: String,
@@ -20,6 +27,8 @@ impl Default for ExecutorConfig {
     }
 }
 
+/// A local data file mounted into the executor's DataFusion context.
+/// The `type` field selects the variant (e.g. `type = "parquet"`).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DatasetMount {
@@ -48,6 +57,7 @@ impl DatasetMount {
     }
 }
 
+/// Load configuration from an optional TOML file; use defaults if none provided.
 pub fn load(config_path: Option<&str>) -> anyhow::Result<ExecutorConfig> {
     match config_path {
         Some(path) => {

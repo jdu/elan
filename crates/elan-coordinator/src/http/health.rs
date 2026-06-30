@@ -1,3 +1,9 @@
+//! HTTP handlers for elan-coordinator.
+//!
+//! - `GET /health` — liveness probe
+//! - `GET /auth/check` — called by elan-executor to verify caller access to a
+//!   dataset.  Currently always returns `allowed=true` (PoC stub).
+
 use axum::{Json, Router, extract::Query, routing::get};
 use elan_common::types::api::HealthResponse;
 use serde::Deserialize;

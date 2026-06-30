@@ -1,3 +1,10 @@
+//! Coordinator heartbeat loop.
+//!
+//! Opens a bidirectional streaming RPC to elan-central and sends a
+//! `HeartbeatRequest` every 15 seconds.  The loop retries after a 30-second
+//! back-off if the stream drops.  elan-central uses the heartbeat to keep
+//! `last_heartbeat_at` fresh and the coordinator marked alive.
+
 use elan_common::proto::coordinator::{
     coordinator_service_client::CoordinatorServiceClient, HeartbeatRequest,
 };
@@ -6,6 +13,7 @@ use tokio_stream::StreamExt;
 use tonic::transport::Channel;
 use tracing::{error, info, warn};
 
+/// Run the heartbeat loop forever, reconnecting automatically on stream errors.
 pub async fn run(coordinator_id: String, mut client: CoordinatorServiceClient<Channel>) {
     let interval = Duration::from_secs(15);
 

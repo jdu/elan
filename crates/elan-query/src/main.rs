@@ -1,3 +1,19 @@
+//! elan-query: the central SQL gateway for the elan federated query system.
+//!
+//! On startup elan-query:
+//! 1. Loads all datasets from elan-central's `CatalogService`.
+//! 2. Loads IAM policies from elan-central's `IamService`.
+//! 3. Starts a background task to refresh the catalog every 30 seconds.
+//! 4. Listens for HTTP queries on the configured address.
+//!
+//! For each incoming query a per-request `SessionContext` is built with:
+//! - An `ElanCatalogProvider` populated with the IAM-filtered dataset list.
+//! - An `IamFilterRule` physical optimizer rule that enforces access at scan time.
+//!
+//! Audit events (QuerySubmitted, QueryCompleted, QueryFailed) are sent to
+//! elan-central via `CentralAuditSink`, falling back to a no-op sink if the
+//! connection fails.
+
 mod catalog;
 mod config;
 mod http;

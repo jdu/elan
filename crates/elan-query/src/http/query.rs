@@ -1,3 +1,12 @@
+//! HTTP query and catalog handlers for elan-query.
+//!
+//! - `POST /api/v1/query` — execute SQL for an authenticated user; emits
+//!   `QuerySubmitted` / `QueryCompleted` / `QueryFailed` audit events.
+//! - `GET /api/v1/catalog` — return the IAM-filtered namespace/dataset tree.
+//!
+//! Authentication is PoC-only: `Authorization: Bearer <username>` maps the
+//! bearer token directly to a user ID with no signature verification.
+
 use crate::session::SessionFactory;
 use axum::{
     extract::{Extension, State},
@@ -18,12 +27,14 @@ use std::{collections::HashMap, sync::Arc, time::Instant};
 use tracing::{error, info, instrument};
 use uuid::Uuid;
 
+/// Shared state injected into every HTTP handler via Axum's `State` extractor.
 pub struct AppState {
     pub session_factory: Arc<SessionFactory>,
     pub audit: Arc<dyn AuditSink>,
     pub instance_name: String,
 }
 
+/// Build the Axum router with all elan-query HTTP endpoints.
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/v1/query", post(handle_query))
@@ -36,6 +47,8 @@ async fn health() -> Json<elan_common::types::api::HealthResponse> {
     Json(elan_common::types::api::HealthResponse { status: "ok".into() })
 }
 
+/// Extract the requesting user's identity from the `Authorization` header.
+/// Falls back to `"anonymous"` if the header is absent or malformed.
 fn extract_subject(headers: &HeaderMap) -> Subject {
     // PoC auth: "Authorization: Bearer <username>"
     let user_id = headers

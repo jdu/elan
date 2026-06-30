@@ -1,5 +1,11 @@
+//! Configuration loading for elan-query.
+//!
+//! Settings are layered: built-in defaults < config file < `ELAN_QUERY__*`
+//! environment variables.
+
 use serde::Deserialize;
 
+/// Top-level configuration for elan-query.
 #[derive(Debug, Clone, Deserialize)]
 pub struct QueryConfig {
     pub http_addr: String,
@@ -21,6 +27,7 @@ impl Default for QueryConfig {
     }
 }
 
+/// Load configuration, optionally from a file path, then override with env vars.
 pub fn load(config_path: Option<&str>) -> anyhow::Result<QueryConfig> {
     let mut builder = config::Config::builder()
         .set_default("http_addr", "0.0.0.0:3000")?

@@ -1,3 +1,12 @@
+//! Dataset schema inference and registration proto construction.
+//!
+//! [`to_registration`] opens the actual data file with DataFusion to infer the
+//! real Arrow schema.  If inference fails (missing file, unsupported format,
+//! etc.) it falls back to a single `_placeholder: Utf8` column so the
+//! registration still succeeds and the dataset appears in the catalog.
+//! elan-query will receive the placeholder schema but the executor will use
+//! the real file schema at query time.
+
 use crate::config::DatasetConfig;
 use arrow_ipc::writer::{IpcWriteOptions, StreamWriter};
 use arrow_schema::{DataType, Field, Schema};

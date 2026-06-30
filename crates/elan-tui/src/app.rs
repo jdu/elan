@@ -1,3 +1,9 @@
+//! elan-tui application state and ratatui rendering.
+//!
+//! [`App`] is the single source of truth for the TUI.  The main event loop
+//! in `main.rs` mutates `App` in response to [`AppEvent`]s and calls
+//! [`App::draw`] on every iteration.
+
 use crate::client::{central::CentralClient, query::QueryClient};
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyModifiers};
 use elan_common::types::api::{CatalogResponse, NamespaceInfo, QueryResponse};
@@ -14,6 +20,7 @@ use tokio::sync::Mutex;
 use tui_textarea::TextArea;
 use uuid::Uuid;
 
+/// Which TUI pane currently has keyboard focus.
 #[derive(PartialEq, Clone, Copy)]
 pub enum Pane {
     Editor,
@@ -22,6 +29,7 @@ pub enum Pane {
     Catalog,
 }
 
+/// All mutable UI state for elan-tui.
 pub struct App {
     pub active_pane: Pane,
     pub editor: TextArea<'static>,
@@ -39,6 +47,8 @@ pub struct App {
 }
 
 impl App {
+    /// Create a new `App` instance.  The central client is connected asynchronously
+    /// after construction, so `central_client` starts as `None`.
     pub fn new(query_url: String, central_url: Option<String>, username: String) -> Self {
         let mut editor = TextArea::default();
         editor.set_placeholder_text("Enter SQL query... (Ctrl+Enter or F5 to execute)");
@@ -60,6 +70,7 @@ impl App {
         }
     }
 
+    /// Render the full TUI layout into `frame`.
     pub fn draw(&self, frame: &mut Frame) {
         let area = frame.area();
 
@@ -222,6 +233,7 @@ impl App {
         frame.render_widget(status, bar_area);
     }
 
+    /// Cycle focus to the next pane in tab order: Editor → Results → Audit → Catalog → Editor.
     pub fn next_pane(&mut self) {
         self.active_pane = match self.active_pane {
             Pane::Editor => Pane::Results,
@@ -231,8 +243,10 @@ impl App {
         };
     }
 
+    /// Append an audit message and evict the oldest entry if the log exceeds 500 lines.
     pub fn push_audit(&mut self, msg: String) {
         self.audit_log.push(msg);
+        // Cap in-memory history to avoid unbounded growth during long sessions.
         if self.audit_log.len() > 500 {
             self.audit_log.remove(0);
         }
