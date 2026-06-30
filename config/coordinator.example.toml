@@ -1,0 +1,28 @@
+[coordinator]
+id          = "poc-local-01"
+environment = "development"
+hostname    = "localhost"
+
+[central]
+endpoint = "http://localhost:50051"
+
+[executor]
+endpoint = "localhost:50055"
+
+[http]
+addr = "0.0.0.0:8081"
+
+[[datasets]]
+type        = "parquet"
+name        = "transactions"
+namespace   = "finance"
+path        = "./data/finance/transactions/*.parquet"
+description = "Sample transaction records"
+
+[[datasets]]
+type       = "csv"
+name       = "customers"
+namespace  = "crm"
+path       = "./data/crm/customers.csv"
+delimiter  = ","
+has_header = true

@@ -1,0 +1,50 @@
+syntax = "proto3";
+package elan.coordinator;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+service CoordinatorService {
+  rpc Register(RegisterRequest)              returns (RegisterResponse);
+  rpc Heartbeat(stream HeartbeatRequest)    returns (stream HeartbeatResponse);
+  rpc RegisterDataset(DatasetRegistration)   returns (DatasetRegistrationResponse);
+  rpc UnregisterDataset(UnregisterDatasetRequest) returns (google.protobuf.Empty);
+}
+
+message RegisterRequest {
+  string coordinator_id    = 1;
+  string environment       = 2;
+  string hostname          = 3;
+  string executor_endpoint = 4;
+}
+
+message RegisterResponse {
+  bool accepted = 1;
+}
+
+message HeartbeatRequest {
+  string coordinator_id = 1;
+  google.protobuf.Timestamp sent_at = 2;
+}
+
+message HeartbeatResponse {
+  bool alive = 1;
+}
+
+message DatasetRegistration {
+  string coordinator_id   = 1;
+  string dataset_id       = 2;
+  string name             = 3;
+  string namespace        = 4;
+  string source_type      = 5;
+  bytes  arrow_schema_ipc = 6;
+  string metadata_json    = 7;
+}
+
+message DatasetRegistrationResponse {
+  bool accepted = 1;
+}
+
+message UnregisterDatasetRequest {
+  string dataset_id = 1;
+}

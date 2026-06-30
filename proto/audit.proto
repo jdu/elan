@@ -1,0 +1,28 @@
+syntax = "proto3";
+package elan.audit;
+
+import "google/protobuf/timestamp.proto";
+
+service AuditService {
+  rpc StreamAuditEvents(StreamRequest) returns (stream AuditEventProto);
+  rpc PublishEvent(AuditEventProto)    returns (PublishResponse);
+}
+
+message StreamRequest {
+  google.protobuf.Timestamp since       = 1;
+  repeated string           event_types = 2;
+}
+
+message AuditEventProto {
+  string                    event_id       = 1;
+  string                    event_type     = 2;
+  google.protobuf.Timestamp occurred_at   = 3;
+  string                    source_service = 4;
+  string                    user_id        = 5;
+  string                    session_id     = 6;
+  string                    payload_json   = 7;
+}
+
+message PublishResponse {
+  bool accepted = 1;
+}

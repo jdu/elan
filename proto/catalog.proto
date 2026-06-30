@@ -1,0 +1,32 @@
+syntax = "proto3";
+package elan.catalog;
+
+service CatalogService {
+  rpc GetDataset(GetDatasetRequest)       returns (DatasetProto);
+  rpc ListDatasets(ListDatasetsRequest)   returns (stream DatasetProto);
+  rpc SearchDatasets(SearchRequest)       returns (stream DatasetProto);
+}
+
+message GetDatasetRequest {
+  string namespace = 1;
+  string name      = 2;
+}
+
+message ListDatasetsRequest {
+  string namespace_filter = 1;
+}
+
+message SearchRequest {
+  string query = 1;
+}
+
+message DatasetProto {
+  string dataset_id        = 1;
+  string name              = 2;
+  string namespace         = 3;
+  string source_type       = 4;
+  string coordinator_id    = 5;
+  string executor_endpoint = 6;
+  bytes  arrow_schema_ipc  = 7;
+  string metadata_json     = 8;
+}

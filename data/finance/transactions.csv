@@ -1,0 +1,16 @@
+transaction_id,customer_id,amount,currency,merchant,category,status,created_at
+txn-0001,cust-001,124.99,GBP,Amazon UK,retail,completed,2024-01-03T10:22:00Z
+txn-0002,cust-002,3200.00,JPY,Yamada Denki,electronics,completed,2024-01-04T14:05:00Z
+txn-0003,cust-003,450.00,MXN,Soriana,groceries,completed,2024-01-05T09:15:00Z
+txn-0004,cust-001,89.50,GBP,Costa Coffee,food_drink,completed,2024-01-06T08:30:00Z
+txn-0005,cust-004,200.00,USD,Apple Store,electronics,completed,2024-01-07T16:45:00Z
+txn-0006,cust-005,75.80,SGD,FairPrice,groceries,completed,2024-01-08T12:00:00Z
+txn-0007,cust-006,349.99,EUR,MediaMarkt,electronics,completed,2024-01-09T11:30:00Z
+txn-0008,cust-007,55000.00,KRW,Coupang,retail,completed,2024-01-10T15:20:00Z
+txn-0009,cust-008,1500.00,PKR,Daraz,retail,pending,2024-01-11T13:10:00Z
+txn-0010,cust-009,1299.00,SEK,IKEA,home,completed,2024-01-12T10:00:00Z
+txn-0011,cust-010,350.00,BRL,Magazine Luiza,electronics,completed,2024-01-13T09:45:00Z
+txn-0012,cust-001,249.00,GBP,John Lewis,home,completed,2024-01-14T14:30:00Z
+txn-0013,cust-003,680.00,MXN,Liverpool,fashion,failed,2024-01-15T16:00:00Z
+txn-0014,cust-006,89.99,EUR,Zalando,fashion,completed,2024-01-16T11:15:00Z
+txn-0015,cust-002,8500.00,JPY,Uniqlo,fashion,completed,2024-01-17T13:50:00Z

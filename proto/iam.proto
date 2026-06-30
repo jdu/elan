@@ -1,0 +1,71 @@
+syntax = "proto3";
+package elan.iam;
+
+import "google/protobuf/empty.proto";
+
+service IamService {
+  rpc CheckAccess(AccessRequest)            returns (AccessDecision);
+  rpc ListPolicies(ListPoliciesRequest)     returns (stream PolicyProto);
+  rpc CreatePolicy(PolicyProto)             returns (PolicyIdResponse);
+  rpc DeletePolicy(PolicyIdRequest)         returns (google.protobuf.Empty);
+  rpc CreateSubject(SubjectProto)           returns (SubjectIdResponse);
+  rpc AddGroupMember(GroupMemberRequest)    returns (google.protobuf.Empty);
+}
+
+enum Effect {
+  ALLOW = 0;
+  DENY  = 1;
+}
+
+message AccessRequest {
+  string          user_id  = 1;
+  repeated string groups   = 2;
+  string          namespace = 3;
+  string          dataset   = 4;
+  string          action    = 5;
+}
+
+message AccessDecision {
+  bool   allowed          = 1;
+  string reason           = 2;
+  string row_filter       = 3;
+  string column_mask_json = 4;
+}
+
+message PolicyProto {
+  string policy_id         = 1;
+  string subject_name      = 2;
+  string subject_type      = 3;
+  string resource_pattern  = 4;
+  string action            = 5;
+  Effect effect            = 6;
+  string row_filter        = 7;
+  string column_mask_json  = 8;
+  int32  priority          = 9;
+}
+
+message ListPoliciesRequest {
+  string subject_name = 1;
+}
+
+message PolicyIdResponse {
+  string policy_id = 1;
+}
+
+message PolicyIdRequest {
+  string policy_id = 1;
+}
+
+message SubjectProto {
+  string subject_type = 1;
+  string name         = 2;
+}
+
+message SubjectIdResponse {
+  string subject_id = 1;
+}
+
+message GroupMemberRequest {
+  string group_name = 1;
+  string user_name  = 2;
+}

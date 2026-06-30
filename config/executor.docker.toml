@@ -1,0 +1,15 @@
+bind_host       = "0.0.0.0"
+bind_port       = 50055
+coordinator_url = "http://elan-coordinator:8081"
+
+[[datasets]]
+type       = "csv"
+table_name = "transactions"
+path       = "/app/data/finance/transactions.csv"
+has_header = true
+
+[[datasets]]
+type       = "csv"
+table_name = "customers"
+path       = "/app/data/crm/customers.csv"
+has_header = true

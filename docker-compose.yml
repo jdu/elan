@@ -1,0 +1,141 @@
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    hostname: zookeeper
+    container_name: elan-zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - elan
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    hostname: kafka
+    container_name: elan-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - elan
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: elan-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: elan
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    networks:
+      - elan
+
+  # ── Elan services ───────────────────────────────────────────────────────────
+
+  elan-central:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: elan:latest
+    container_name: elan-central
+    command: ["/usr/local/bin/elan-central", "--config", "/app/config/central.docker.toml"]
+    ports:
+      - "50051:50051"   # gRPC
+      - "8080:8080"     # HTTP health
+    volumes:
+      - ./config:/app/config:ro
+    networks:
+      - elan
+    environment:
+      RUST_LOG: "info,elan_central=debug"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  elan-coordinator:
+    image: elan:latest
+    container_name: elan-coordinator
+    command: ["/usr/local/bin/elan-coordinator", "--config", "/app/config/coordinator.docker.toml"]
+    ports:
+      - "8081:8081"
+    depends_on:
+      elan-central:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data:ro
+    networks:
+      - elan
+    environment:
+      RUST_LOG: "info,elan_coordinator=debug"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8081/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  elan-executor:
+    image: elan:latest
+    container_name: elan-executor
+    command: ["/usr/local/bin/elan-executor", "--config", "/app/config/executor.docker.toml"]
+    ports:
+      - "50055:50055"
+      - "50056:50056"   # HTTP SQL service (bind_port + 1)
+    depends_on:
+      elan-coordinator:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data:ro
+    networks:
+      - elan
+    environment:
+      RUST_LOG: "info,elan_executor=debug"
+    restart: unless-stopped
+
+  elan-query:
+    image: elan:latest
+    container_name: elan-query
+    command: ["/usr/local/bin/elan-query", "--config", "/app/config/query.docker.toml"]
+    ports:
+      - "3001:3000"
+    depends_on:
+      elan-central:
+        condition: service_healthy
+      elan-executor:
+        condition: service_started
+      kafka:
+        condition: service_started
+    volumes:
+      - ./config:/app/config:ro
+    networks:
+      - elan
+    environment:
+      RUST_LOG: "info,elan_query=debug"
+    restart: unless-stopped
+
+networks:
+  elan:
+    driver: bridge

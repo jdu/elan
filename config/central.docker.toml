@@ -1,0 +1,3 @@
+grpc_addr    = "0.0.0.0:50051"
+http_addr    = "0.0.0.0:8080"
+database_url = "sqlite:///tmp/elan_central.db"

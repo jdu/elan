@@ -1,0 +1,11 @@
+customer_id,name,email,country,tier,created_at
+cust-001,Alice Martin,alice@example.com,GB,gold,2023-01-15
+cust-002,Bob Tanaka,bob@example.com,JP,silver,2023-03-22
+cust-003,Carla Reyes,carla@example.com,MX,bronze,2023-06-01
+cust-004,David Osei,david@example.com,GH,gold,2023-07-10
+cust-005,Emma Chen,emma@example.com,SG,silver,2023-08-05
+cust-006,Frank Müller,frank@example.com,DE,gold,2023-09-12
+cust-007,Grace Park,grace@example.com,KR,bronze,2023-10-01
+cust-008,Hamid Raza,hamid@example.com,PK,silver,2023-11-18
+cust-009,Ingrid Svensson,ingrid@example.com,SE,gold,2024-01-07
+cust-010,Jorge Silva,jorge@example.com,BR,bronze,2024-02-14

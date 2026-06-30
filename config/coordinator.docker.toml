@@ -1,0 +1,29 @@
+[coordinator]
+id          = "docker-coordinator-01"
+environment = "docker"
+hostname    = "elan-coordinator"
+
+[central]
+endpoint = "http://elan-central:50051"
+
+[executor]
+endpoint = "elan-executor:50055"
+
+[http]
+addr = "0.0.0.0:8081"
+
+[[datasets]]
+type        = "csv"
+name        = "transactions"
+namespace   = "finance"
+path        = "/app/data/finance/transactions.csv"
+has_header  = true
+description = "Sample transaction records"
+
+[[datasets]]
+type       = "csv"
+name       = "customers"
+namespace  = "crm"
+path       = "/app/data/crm/customers.csv"
+delimiter  = ","
+has_header = true

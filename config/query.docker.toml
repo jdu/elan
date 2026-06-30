@@ -1,0 +1,5 @@
+http_addr        = "0.0.0.0:3000"
+central_endpoint = "http://elan-central:50051"
+instance_name    = "query-node-1"
+iam_refresh_secs = 60
+kafka_brokers    = "kafka:29092"

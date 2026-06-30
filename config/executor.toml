@@ -1,0 +1,14 @@
+bind_host       = "0.0.0.0"
+bind_port       = 50055
+coordinator_url = "http://localhost:8081"
+
+[[datasets]]
+type       = "parquet"
+table_name = "transactions"
+path       = "./data/finance/transactions/*.parquet"
+
+[[datasets]]
+type       = "csv"
+table_name = "customers"
+path       = "./data/crm/customers.csv"
+has_header = true
