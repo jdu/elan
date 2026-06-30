@@ -179,13 +179,21 @@ This starts:
 
 The first build takes a few minutes. Subsequent builds reuse the BuildKit cache.
 
-To scale the executor pool:
+### 2. Scale the executor pool
+
+Executor replicas all read from the shared MinIO bucket, so you can add more at any time without restarting anything else:
 
 ```bash
 docker compose up --scale elan-executor=3
 ```
 
-### 2. Verify everything is up
+nginx automatically picks up the new replicas via Docker's internal DNS and distributes requests across them. Scale back down the same way:
+
+```bash
+docker compose up --scale elan-executor=1
+```
+
+### 3. Verify everything is up (optional)
 
 ```bash
 curl http://localhost:8080/health      # elan-central
@@ -196,7 +204,7 @@ curl http://localhost:3001/api/v1/catalog | jq .   # registered datasets
 open http://localhost:9001             # MinIO web console (user: minioadmin / minioadmin)
 ```
 
-### 3. Run a query
+### 4. Run a query
 
 ```bash
 # Simple scan
@@ -214,7 +222,7 @@ curl -s -X POST http://localhost:3001/api/v1/query \
   }' | jq .
 ```
 
-### 4. Launch the TUI
+### 5. Launch the TUI
 
 The TUI runs on your local machine and connects to the query service over HTTP:
 
