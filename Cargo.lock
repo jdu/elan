@@ -2647,6 +2647,7 @@ dependencies = [
  "datafusion",
  "elan-common",
  "futures",
+ "object_store",
  "prost 0.13.5",
  "prost-types 0.13.5",
  "serde",
@@ -2659,6 +2660,7 @@ dependencies = [
  "tower 0.5.3",
  "tracing",
  "tracing-subscriber",
+ "url",
  "uuid",
 ]
 
@@ -2678,6 +2680,7 @@ dependencies = [
  "datafusion",
  "datafusion-proto",
  "elan-common",
+ "object_store",
  "reqwest",
  "serde",
  "serde_json",
@@ -2687,6 +2690,7 @@ dependencies = [
  "tonic 0.14.6",
  "tracing",
  "tracing-subscriber",
+ "url",
  "uuid",
 ]
 

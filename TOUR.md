@@ -42,28 +42,36 @@ flowchart TD
 
     subgraph OrgA ["Organisation A — CRM team"]
         CoordA["Data Agent\n(elan-coordinator)"]
-        ExecA["Local Query Engine\n(elan-executor)"]
-        DataA[("crm/customers.csv")]
+        StoreA[("Shared Storage\nMinIO / S3")]
+        LBA["Load Balancer"]
+        ExecA1["Query Engine 1\n(elan-executor)"]
+        ExecA2["Query Engine 2\n(elan-executor)"]
     end
 
     subgraph OrgB ["Organisation B — Finance team"]
         CoordB["Data Agent\n(elan-coordinator)"]
-        ExecB["Local Query Engine\n(elan-executor)"]
-        DataB[("finance/transactions.csv")]
+        StoreB[("Shared Storage\nMinIO / S3")]
+        LBB["Load Balancer"]
+        ExecB1["Query Engine 1\n(elan-executor)"]
+        ExecB2["Query Engine 2\n(elan-executor)"]
     end
 
     User -->|"SQL query"| Q
     Q <-->|"Who has what data?\nWho's allowed to see it?"| C
-    Q -->|"Query fragment"| ExecA
-    Q -->|"Query fragment"| ExecB
-    ExecA -->|"Results"| Q
-    ExecB -->|"Results"| Q
+    Q -->|"Query fragment"| LBA
+    Q -->|"Query fragment"| LBB
+    LBA --> ExecA1 & ExecA2
+    LBB --> ExecB1 & ExecB2
+    ExecA1 & ExecA2 -->|"read"| StoreA
+    ExecB1 & ExecB2 -->|"read"| StoreB
+    LBA -->|"Results"| Q
+    LBB -->|"Results"| Q
     Q -->|"Combined answer"| User
 
+    CoordA -->|"Upload files"| StoreA
     CoordA -->|"Register dataset + schema"| C
+    CoordB -->|"Upload files"| StoreB
     CoordB -->|"Register dataset + schema"| C
-    ExecA --- DataA
-    ExecB --- DataB
 ```
 
 ---
@@ -74,11 +82,14 @@ flowchart TD
 |---|---|---|
 | **Registry & Rules** (`elan-central`) | Central team | Keeps the directory of all registered datasets, access rules, and the audit log |
 | **Query Service** (`elan-query`) | Central team | Accepts SQL from users, plans the query, fans out to data agents, returns results |
-| **Data Agent** (`elan-coordinator`) | Each data owner | Reads local data files, infers their structure, and advertises them to the central registry |
-| **Local Query Engine** (`elan-executor`) | Each data owner | Sits next to the data, receives query fragments, runs them locally, returns only the results |
+| **Data Agent** (`elan-coordinator`) | Each data owner | Reads local data files, infers their structure, uploads them to shared storage, and advertises them to the central registry |
+| **Shared Storage** (MinIO / S3) | Each data owner | Holds the actual dataset files — all query engines in the same environment read from here |
+| **Query Engine pool** (`elan-executor` × N) | Each data owner | Receives query fragments, reads data from shared storage, returns results — can be scaled up to handle more load |
 | **Terminal UI** (`elan-tui`) | Analyst's machine | SQL editor, results viewer, live audit log, and dataset browser |
 
-The data agents and local query engines are deployed **inside each organisation's own infrastructure**. Only query results travel to the central service — not the underlying data files.
+The data agents, shared storage, and query engines are all deployed **inside each organisation's own infrastructure**. Only query results travel to the central service — not the underlying data files.
+
+Because the query engines read from shared storage rather than local disks, you can run as many of them as needed. Adding more engines handles more simultaneous queries or larger datasets without any changes to the central service.
 
 ---
 
@@ -92,7 +103,9 @@ sequenceDiagram
     participant TUI as Terminal UI
     participant Q as Query Service
     participant C as Registry & Rules
+    participant LBA as CRM Load Balancer
     participant ExA as CRM Query Engine
+    participant LBB as Finance Load Balancer
     participant ExB as Finance Query Engine
 
     Analyst->>TUI: Type SQL, press Ctrl+Enter
@@ -101,14 +114,18 @@ sequenceDiagram
     Q->>C: Check access rules for this user
     C-->>Q: "alice may read crm.customers and finance.transactions"
 
-    Q->>Q: Plan the query — decide which engines hold each table
+    Q->>Q: Plan the query — decide which engine pools hold each table
 
     par Parallel fetch
-        Q->>ExA: SELECT * FROM customers WHERE ...
-        ExA-->>Q: Arrow result stream (CRM rows)
+        Q->>LBA: SELECT * FROM customers WHERE ...
+        LBA->>ExA: Route to available engine
+        ExA-->>LBA: Arrow result stream (CRM rows)
+        LBA-->>Q: Arrow result stream
     and
-        Q->>ExB: SELECT * FROM transactions WHERE ...
-        ExB-->>Q: Arrow result stream (Finance rows)
+        Q->>LBB: SELECT * FROM transactions WHERE ...
+        LBB->>ExB: Route to available engine
+        ExB-->>LBB: Arrow result stream (Finance rows)
+        LBB-->>Q: Arrow result stream
     end
 
     Q->>Q: Join the two result sets locally
@@ -117,7 +134,7 @@ sequenceDiagram
     TUI-->>Analyst: Rendered table + audit entry appears
 ```
 
-The join happens inside the Query Service using only the result rows — the raw data files are never transferred.
+The join happens inside the Query Service using only the result rows — the raw data files are never transferred. The load balancer automatically distributes queries across however many query engines are running.
 
 ---
 
@@ -179,7 +196,7 @@ Multiple users can be connected simultaneously; all of them see a shared, live f
 
 ## Schema discovery
 
-When a data agent starts up, it doesn't just announce that a dataset exists — it opens the actual data files, reads the column names and data types, and registers that structure with the central registry.
+When a data agent starts up, it doesn't just announce that a dataset exists — it opens the actual data files, reads the column names and data types, and registers that structure with the central registry. It also uploads the files to the environment's shared storage so that all query engines in that environment can access them without each needing their own copy.
 
 This means the query service knows the full shape of every dataset before any query is submitted, without ever reading the data itself. The registry becomes a searchable catalogue of what data is available, where it lives, and what its structure looks like.
 
@@ -247,5 +264,6 @@ This PoC establishes the core federation, access control, and audit mechanics. T
 | **More source types** | Postgres databases and Delta Lake tables alongside CSV/Parquet |
 | **Encrypted transport** | TLS on all inter-service communication |
 | **Production deployment** | Kubernetes manifests and Helm chart for central and remote components |
+| **Distributed query execution** | Use Apache Ballista to split a single large query across all engines in a pool simultaneously, rather than routing whole queries to individual engines |
 
 A full list of planned work is in [TODO.md](TODO.md).

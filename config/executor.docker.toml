@@ -2,14 +2,21 @@ bind_host       = "0.0.0.0"
 bind_port       = 50055
 coordinator_url = "http://elan-coordinator:8081"
 
+[object_store]
+endpoint   = "http://minio:9000"
+access_key = "minioadmin"
+secret_key = "minioadmin"
+bucket     = "elan-data"
+allow_http = true
+
 [[datasets]]
 type       = "csv"
 table_name = "transactions"
-path       = "/app/data/finance/transactions.csv"
+path       = "s3://elan-data/finance/transactions.csv"
 has_header = true
 
 [[datasets]]
 type       = "csv"
 table_name = "customers"
-path       = "/app/data/crm/customers.csv"
+path       = "s3://elan-data/crm/customers.csv"
 has_header = true

@@ -13,8 +13,27 @@ pub struct CoordinatorConfig {
     pub central: CentralConfig,
     pub executor: ExecutorConfig,
     pub http: HttpConfig,
+    /// When present, dataset files are uploaded to this object store on startup
+    /// so that executor replicas can read them from shared storage.
+    #[serde(default)]
+    pub object_store: Option<ObjectStoreConfig>,
     #[serde(default)]
     pub datasets: Vec<DatasetConfig>,
+}
+
+/// Connection details for an S3-compatible object store used to share dataset
+/// files between the coordinator (which uploads) and executor replicas (which read).
+#[derive(Debug, Clone, Deserialize)]
+pub struct ObjectStoreConfig {
+    /// Full URL of the S3 endpoint, e.g. `http://minio:9000`.
+    pub endpoint: String,
+    pub access_key: String,
+    pub secret_key: String,
+    /// Bucket that holds all elan datasets.
+    pub bucket: String,
+    /// Allow plain HTTP — set to true for local MinIO.
+    #[serde(default)]
+    pub allow_http: bool,
 }
 
 /// Identity fields sent to elan-central on registration.

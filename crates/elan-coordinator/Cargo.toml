@@ -32,4 +32,6 @@ arrow-schema.workspace      = true
 arrow-ipc.workspace         = true
 arrow-array.workspace       = true
 datafusion.workspace        = true
+object_store.workspace      = true
+url.workspace               = true
 async-stream = "0.3"

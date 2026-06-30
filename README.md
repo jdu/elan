@@ -15,6 +15,14 @@ POST /api/v1/query
 { "sql": "SELECT c.name, SUM(t.amount) FROM finance.transactions t JOIN crm.customers c ON t.customer_id = c.customer_id GROUP BY c.name" }
 ```
 
+## What we use AI for
+
+- Writing comments
+- General debugging to figure out why something isn't working
+- Simplifying complex code for better understanding
+- Writing automated tests for existing code
+- Generating documentation and READMEs
+
 ---
 
 ## Architecture
@@ -28,16 +36,22 @@ POST /api/v1/query
                               │              │
               ┌───────────────┘              └──────────────────┐
               │                                                 │
-    ┌─────────▼──────────┐                        ┌────────────▼──────────┐
-    │  elan-coordinator  │                        │     elan-executor     │
-    │  infers schema from│   ─── remote env ───   │  HTTP SQL service     │
-    │  local data files  │                        │  runs DataFusion      │
-    │  registers dataset │                        │  against local data   │
-    │  + schema to       │                        └───────────────────────┘
-    │  elan-central      │                                    ▲
-    └────────────────────┘                                    │ POST /sql → Arrow IPC
-                                                              │
-    ┌───────────────────────────┐              ┌─────────────┴──────────┐
+    ┌─────────▼──────────┐      uploads       ┌────────────────▼────────┐
+    │  elan-coordinator  │ ─────────────────► │   MinIO (object store)  │
+    │  infers schema     │   ─ remote env ─   │   S3-compatible API     │
+    │  uploads datasets  │                    └────────────┬────────────┘
+    │  registers to      │                                 │ reads
+    │  elan-central      │                    ┌────────────▼────────────┐
+    └────────────────────┘                    │   elan-executor (×N)    │
+                                              │   HTTP SQL service      │
+                                              │   DataFusion → MinIO    │
+                                              └────────────┬────────────┘
+                                                           │ POST /sql → Arrow IPC
+                                              ┌────────────▼────────────┐
+                                              │   nginx load balancer   │
+                                              └────────────┬────────────┘
+                                                           │
+    ┌───────────────────────────┐              ┌───────────▼────────────┐
     │        elan-tui           │◄─── HTTP ───►│      elan-query        │
     │  SQL editor (ratatui)     │              │  DataFusion planning   │
     │  result table             │              │  IAM enforcement       │
@@ -55,15 +69,17 @@ The components split into two groups:
 
 **Central infrastructure** — `elan-central` and `elan-query` are deployed together. Users and tooling interact with `elan-query`'s HTTP API. `elan-central` is the persistent authority for the catalog, IAM policies, and the audit log.
 
-**Remote environments** — `elan-coordinator` and `elan-executor` are deployed wherever the data lives (another org, another region, another team's infrastructure). Each environment has one coordinator and one executor.
+**Remote environments** — `elan-coordinator`, `elan-executor` (one or more replicas), an nginx load balancer, and a MinIO object store are deployed wherever the data lives. The executor pool can be scaled horizontally; all replicas read from the shared MinIO bucket.
 
-| Service            | Port(s)                       | Role                                      |
-| ------------------ | ----------------------------- | ----------------------------------------- |
-| `elan-central`     | `50051` (gRPC), `8080` (HTTP) | Catalog, IAM, audit authority             |
-| `elan-coordinator` | `8081` (HTTP)                 | Remote environment — registers datasets   |
-| `elan-executor`    | `50056` (HTTP SQL)            | Remote environment — executes SQL locally |
-| `elan-query`       | `3000` (HTTP)                 | Query entry point, DataFusion planner     |
-| `elan-tui`         | —                             | Terminal UI (runs on the user's machine)  |
+| Service              | Port(s)                         | Role                                              |
+| -------------------- | ------------------------------- | ------------------------------------------------- |
+| `elan-central`       | `50051` (gRPC), `8080` (HTTP)   | Catalog, IAM, audit authority                     |
+| `elan-coordinator`   | `8081` (HTTP)                   | Uploads datasets to MinIO, registers with central |
+| `elan-executor` ×N   | `50056` (HTTP SQL, internal)    | Executes SQL against MinIO data (scalable pool)   |
+| nginx                | `50056` (external)              | Load-balances HTTP SQL across executor replicas   |
+| MinIO                | `9000` (S3 API), `9001` (UI)    | Shared S3-compatible object store for datasets    |
+| `elan-query`         | `3000` (HTTP)                   | Query entry point, DataFusion planner             |
+| `elan-tui`           | —                               | Terminal UI (runs on the user's machine)          |
 
 ---
 
@@ -73,19 +89,20 @@ The components split into two groups:
 2. `elan-query` looks up its cached dataset catalog (populated from `elan-central` at startup and refreshed every 30 seconds).
 3. DataFusion plans the SQL. For each table reference in the plan, a `RemoteTableScanExec` node is produced — it knows the executor endpoint for that dataset.
 4. The IAM optimizer rule runs over the plan: datasets the user cannot access are replaced with `EmptyExec` (zero rows); row-level filters are prepended where applicable.
-5. Each `RemoteTableScanExec` POSTs the SQL for its dataset to the executor's HTTP SQL service (`POST http://{executor}:50056/sql`). The executor runs DataFusion locally against the real file and returns an Arrow IPC stream.
+5. Each `RemoteTableScanExec` POSTs the SQL for its dataset to the nginx load balancer (`POST http://elan-executor-lb:50056/sql`), which forwards the request to one of the executor replicas. The executor runs DataFusion against the dataset file in MinIO and returns an Arrow IPC stream.
 6. `elan-query` decodes the Arrow IPC stream and assembles the final result for the user.
 
-Joins across namespaces (e.g. `crm.customers` on executor A joined with `finance.transactions` on executor B) are executed by pulling both result sets to `elan-query` and completing the join there in DataFusion.
+Joins across namespaces (e.g. `crm.customers` and `finance.transactions`) are executed by pulling both result sets to `elan-query` and completing the join there in DataFusion. The executor pool can be scaled independently of the central services.
 
 ---
 
 ## How datasets are registered
 
 1. The coordinator reads its local config file listing datasets (CSV, Parquet, etc.).
-2. At startup, for each dataset, it opens the actual file and infers the full Arrow schema (column names and types) using DataFusion.
-3. It sends a `RegisterDataset` gRPC call to `elan-central` with the dataset name, namespace, executor endpoint, inferred schema (as Arrow IPC bytes), and source metadata.
-4. `elan-central` stores everything in SQLite. `elan-query` picks up the new dataset on its next 30-second catalog refresh — no restart required.
+2. For each dataset, it opens the local file and infers the full Arrow schema (column names and types) using DataFusion.
+3. It uploads the file to the shared MinIO bucket (e.g. `crm/customers.csv`) so that executor replicas — which have no local data volume — can read it.
+4. It sends a `RegisterDataset` gRPC call to `elan-central` with the dataset name, namespace, executor endpoint (the nginx load balancer), inferred schema (as Arrow IPC bytes), and source metadata.
+5. `elan-central` stores everything in SQLite. `elan-query` picks up the new dataset on its next 30-second catalog refresh — no restart required.
 
 ---
 
@@ -153,12 +170,20 @@ docker compose up
 
 This starts:
 
-- `elan-central` (catalog + IAM + audit)
-- `elan-coordinator` (registers sample datasets from `data/`)
-- `elan-executor` (serves those datasets locally)
-- `elan-query` (HTTP query API)
+- `minio` — shared object store (S3-compatible)
+- `elan-central` — catalog, IAM, and audit authority
+- `elan-coordinator` — infers schemas, uploads datasets to MinIO, registers with central
+- `elan-executor` — one replica by default; reads datasets from MinIO
+- `elan-executor-lb` — nginx load balancer in front of the executor pool
+- `elan-query` — HTTP query API
 
 The first build takes a few minutes. Subsequent builds reuse the BuildKit cache.
+
+To scale the executor pool:
+
+```bash
+docker compose up --scale elan-executor=3
+```
 
 ### 2. Verify everything is up
 
@@ -167,6 +192,8 @@ curl http://localhost:8080/health      # elan-central
 curl http://localhost:3001/health      # elan-query
 
 curl http://localhost:3001/api/v1/catalog | jq .   # registered datasets
+
+open http://localhost:9001             # MinIO web console (user: minioadmin / minioadmin)
 ```
 
 ### 3. Run a query
@@ -252,7 +279,7 @@ path       = "/data/ops/orders.csv"
 has_header = true
 ```
 
-2. Restart the coordinator. It infers the Arrow schema from the file and registers the dataset with `elan-central`. `elan-query` picks it up within 30 seconds (no restart needed).
+2. Restart the coordinator. It infers the Arrow schema, uploads the file to MinIO (`ops/orders.csv`), and registers the dataset with `elan-central`. `elan-query` picks it up within 30 seconds (no restart needed).
 
 3. Grant access via `IamService/CreatePolicy` and query:
 
@@ -308,10 +335,11 @@ DATABASE_URL="sqlite:///$(pwd)/elan_central.db" cargo build --workspace
 
 ## Key dependencies
 
-| Crate          | Version | Notes                              |
-| -------------- | ------- | ---------------------------------- |
-| `datafusion`   | `53`    | Query planning and local execution |
-| `arrow-*`      | `58`    | Derived from datafusion 53         |
-| `tonic`        | `0.12`  | gRPC (workspace-wide)              |
-| `ratatui`      | `0.29`  | TUI framework                      |
-| `tui-textarea` | `0.7`   | Must match ratatui 0.29            |
+| Crate          | Version | Notes                                              |
+| -------------- | ------- | -------------------------------------------------- |
+| `datafusion`   | `53`    | Query planning and local execution                 |
+| `arrow-*`      | `58`    | Derived from datafusion 53                         |
+| `object_store` | `0.13`  | S3/MinIO access — must match datafusion 53's pin   |
+| `tonic`        | `0.12`  | gRPC (workspace-wide)                              |
+| `ratatui`      | `0.29`  | TUI framework                                      |
+| `tui-textarea` | `0.7`   | Must match ratatui 0.29                            |

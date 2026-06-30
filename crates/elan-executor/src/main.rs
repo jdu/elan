@@ -73,7 +73,10 @@ async fn main() -> anyhow::Result<()> {
     // Start HTTP SQL service on bind_port + 1 so elan-query can send SQL directly
     // and get Arrow IPC results back, bypassing Ballista's logical plan serialization.
     let http_port = cfg.bind_port + 1;
-    let sql_state = sql_service::SqlServiceState::new(Arc::clone(&providers));
+    let sql_state = sql_service::SqlServiceState::new(
+        Arc::clone(&providers),
+        cfg.object_store.clone().map(Arc::new),
+    );
     let http_addr: std::net::SocketAddr = format!("{}:{}", cfg.bind_host, http_port).parse()?;
     tokio::spawn(async move {
         let listener = tokio::net::TcpListener::bind(http_addr).await.expect("sql service bind");

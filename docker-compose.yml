@@ -1,5 +1,45 @@
 services:
 
+  # ── Object storage ──────────────────────────────────────────────────────────
+
+  minio:
+    image: minio/minio:latest
+    container_name: elan-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # S3-compatible API
+      - "9001:9001"   # MinIO web console
+    environment:
+      MINIO_ROOT_USER:     minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    networks:
+      - elan
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # One-shot container: creates the elan-data bucket.
+  # The coordinator uploads the actual data files once it starts.
+  minio-init:
+    image: minio/mc:latest
+    container_name: elan-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 minioadmin minioadmin &&
+        mc mb local/elan-data --ignore-existing &&
+        echo 'bucket ready'
+      "
+    networks:
+      - elan
+
   # ── Infrastructure ──────────────────────────────────────────────────────────
 
   zookeeper:
@@ -81,9 +121,11 @@ services:
     depends_on:
       elan-central:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     volumes:
       - ./config:/app/config:ro
-      - ./data:/app/data:ro
+      - ./data:/app/data:ro   # local files — coordinator reads and uploads to MinIO
     networks:
       - elan
     environment:
@@ -96,23 +138,40 @@ services:
       retries: 10
       start_period: 5s
 
+  # Executor workers — no local data volume needed; they read from MinIO.
+  # Scale with: docker compose up --scale elan-executor=3
   elan-executor:
     image: elan:latest
-    container_name: elan-executor
     command: ["/usr/local/bin/elan-executor", "--config", "/app/config/executor.docker.toml"]
-    ports:
-      - "50055:50055"
-      - "50056:50056"   # HTTP SQL service (bind_port + 1)
     depends_on:
       elan-coordinator:
         condition: service_healthy
+      minio:
+        condition: service_healthy
     volumes:
       - ./config:/app/config:ro
-      - ./data:/app/data:ro
     networks:
       - elan
     environment:
       RUST_LOG: "info,elan_executor=debug"
+    restart: unless-stopped
+
+  # nginx load balancer — sits in front of the executor worker pool.
+  # elan-query sends HTTP SQL requests to elan-executor-lb:50056; nginx
+  # round-robins them across all elan-executor replicas.
+  # The coordinator registers executor endpoint as elan-executor-lb:50055 so
+  # that elan-query derives port 50056 (+1) for the HTTP SQL service.
+  elan-executor-lb:
+    image: nginx:alpine
+    container_name: elan-executor-lb
+    depends_on:
+      - elan-executor
+    ports:
+      - "50056:50056"
+    volumes:
+      - ./nginx/executor.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - elan
     restart: unless-stopped
 
   elan-query:
@@ -124,7 +183,7 @@ services:
     depends_on:
       elan-central:
         condition: service_healthy
-      elan-executor:
+      elan-executor-lb:
         condition: service_started
       kafka:
         condition: service_started
@@ -139,3 +198,6 @@ services:
 networks:
   elan:
     driver: bridge
+
+volumes:
+  minio-data:

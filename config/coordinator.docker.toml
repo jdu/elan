@@ -7,10 +7,19 @@ hostname    = "elan-coordinator"
 endpoint = "http://elan-central:50051"
 
 [executor]
-endpoint = "elan-executor:50055"
+# elan-query adds 1 to this port to reach the HTTP SQL service (50055 → 50056).
+# The nginx load balancer sits at elan-executor-lb:50055 in front of the worker pool.
+endpoint = "elan-executor-lb:50055"
 
 [http]
 addr = "0.0.0.0:8081"
+
+[object_store]
+endpoint   = "http://minio:9000"
+access_key = "minioadmin"
+secret_key = "minioadmin"
+bucket     = "elan-data"
+allow_http = true
 
 [[datasets]]
 type        = "csv"

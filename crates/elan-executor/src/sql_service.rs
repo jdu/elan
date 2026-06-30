@@ -4,6 +4,8 @@
 //! posts plain-text SQL here and receives Arrow IPC bytes in response.
 //! A new `SessionContext` is created per request so sessions are stateless.
 
+use crate::config::ObjectStoreConfig;
+use crate::context::register_object_store;
 use arrow_ipc::writer::StreamWriter;
 use axum::{
     Router,
@@ -18,19 +20,33 @@ use datafusion::prelude::SessionContext;
 use std::sync::Arc;
 use tracing::{debug, error};
 
-/// Shared state for the SQL HTTP service: a pre-built list of table providers.
+/// Shared state for the SQL HTTP service.
+///
+/// Holds the pre-built table providers and, when object storage is configured,
+/// the S3 connection details needed to re-register the store on every new
+/// `SessionContext`.  The store must be registered on the context that actually
+/// *executes* queries — not just the one used to build the providers at startup.
 #[derive(Clone)]
 pub struct SqlServiceState {
     providers: Arc<Vec<(String, Arc<dyn TableProvider>)>>,
+    object_store: Option<Arc<ObjectStoreConfig>>,
 }
 
 impl SqlServiceState {
-    pub fn new(providers: Arc<Vec<(String, Arc<dyn TableProvider>)>>) -> Self {
-        Self { providers }
+    pub fn new(
+        providers: Arc<Vec<(String, Arc<dyn TableProvider>)>>,
+        object_store: Option<Arc<ObjectStoreConfig>>,
+    ) -> Self {
+        Self { providers, object_store }
     }
 
     async fn session(&self) -> anyhow::Result<SessionContext> {
         let ctx = SessionContext::new();
+        // Re-register the object store so DataFusion can resolve s3:// paths
+        // during execution (not just during provider construction at startup).
+        if let Some(s3_cfg) = &self.object_store {
+            register_object_store(&ctx, s3_cfg)?;
+        }
         for (name, provider) in self.providers.iter() {
             ctx.register_table(name.as_str(), Arc::clone(provider))?;
         }

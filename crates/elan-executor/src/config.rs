@@ -3,6 +3,10 @@
 //! The executor binds two ports derived from a single `bind_port`:
 //! - `bind_port` — Ballista scheduler/executor gRPC (kept for compatibility).
 //! - `bind_port + 1` — Arrow IPC HTTP SQL service used by elan-query.
+//!
+//! When `[object_store]` is present, the executor reads datasets from S3-compatible
+//! object storage (e.g. MinIO) instead of local files.  This enables multiple
+//! executor replicas behind a load balancer to all share the same data.
 
 use serde::Deserialize;
 
@@ -12,8 +16,26 @@ pub struct ExecutorConfig {
     pub bind_host: String,
     pub bind_port: u16,
     pub coordinator_url: String,
+    /// When set, register this S3-compatible store before opening any datasets.
+    /// Paths in `datasets` may then be `s3://bucket/...` URLs.
+    #[serde(default)]
+    pub object_store: Option<ObjectStoreConfig>,
     #[serde(default)]
     pub datasets: Vec<DatasetMount>,
+}
+
+/// Connection details for an S3-compatible object store (MinIO, AWS S3, GCS, etc.).
+#[derive(Debug, Clone, Deserialize)]
+pub struct ObjectStoreConfig {
+    /// Full URL of the S3 endpoint, e.g. `http://minio:9000`.
+    pub endpoint: String,
+    pub access_key: String,
+    pub secret_key: String,
+    /// Bucket that contains all elan datasets.
+    pub bucket: String,
+    /// Allow plain HTTP connections — set to true for local MinIO.
+    #[serde(default)]
+    pub allow_http: bool,
 }
 
 impl Default for ExecutorConfig {
@@ -22,13 +44,14 @@ impl Default for ExecutorConfig {
             bind_host: "0.0.0.0".into(),
             bind_port: 50055,
             coordinator_url: "http://localhost:8081".into(),
+            object_store: None,
             datasets: vec![],
         }
     }
 }
 
-/// A local data file mounted into the executor's DataFusion context.
-/// The `type` field selects the variant (e.g. `type = "parquet"`).
+/// A dataset the executor serves — path may be a local filesystem path or an
+/// `s3://bucket/key` URL when object storage is configured.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DatasetMount {

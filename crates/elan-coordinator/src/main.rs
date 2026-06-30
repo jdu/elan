@@ -2,15 +2,18 @@
 //!
 //! On startup the coordinator:
 //! 1. Reads its TOML config (datasets, central endpoint, executor endpoint).
-//! 2. Registers itself and all configured datasets with elan-central via gRPC.
-//! 3. Starts an HTTP server (`/health`, `/auth/check`) on the configured port.
-//! 4. Runs a continuous heartbeat loop to keep its record alive in elan-central.
+//! 2. If `[object_store]` is configured, uploads all local dataset files to the
+//!    shared object store (MinIO) so executor replicas can read them.
+//! 3. Registers itself and all configured datasets with elan-central via gRPC.
+//! 4. Starts an HTTP server (`/health`, `/auth/check`) on the configured port.
+//! 5. Runs a continuous heartbeat loop to keep its record alive in elan-central.
 
 mod config;
 mod dataset;
 mod heartbeat;
 mod http;
 mod registration;
+mod upload;
 
 use elan_common::proto::coordinator::coordinator_service_client::CoordinatorServiceClient;
 use tracing::info;
@@ -30,6 +33,13 @@ async fn main() -> anyhow::Result<()> {
 
     let cfg = config::load(&config_path)?;
     info!(coordinator_id = %cfg.coordinator.id, "starting elan-coordinator");
+
+    // Upload dataset files to shared object storage before registering, so
+    // executor replicas can read them without needing a local data volume.
+    if let Some(s3_cfg) = &cfg.object_store {
+        info!(endpoint = %s3_cfg.endpoint, bucket = %s3_cfg.bucket, "uploading datasets to object store");
+        upload::upload_datasets(&cfg.datasets, s3_cfg).await?;
+    }
 
     // Connect to central gRPC
     let channel = tonic::transport::Channel::from_shared(cfg.central.endpoint.clone())?
